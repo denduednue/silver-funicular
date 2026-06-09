@@ -66,6 +66,8 @@
 
   <script>
     const fileList = [
+      // Replace url with data: URLs as you convert files to base64
+      // Example: { name: "Indev", data: "data:text/html;base64,PGh0bWw+...", ui: "dropdown" },
       { name: "Indev", url: "https://raw.githubusercontent.com/bubbls/ugs-singlefile/refs/heads/main/UGS-Files/clEaglercraft-Indev-Offline.html", ui: "dropdown" },
       { name: "Alpha 1.2.6", url: "https://raw.githubusercontent.com/bubbls/ugs-singlefile/refs/heads/main/UGS-Files/clEaglercraft-Alpha-126-Offline.html", ui: "dropdown" },
       { name: "Beta 1.3", url: "https://raw.githubusercontent.com/bubbls/ugs-singlefile/refs/heads/main/UGS-Files/clEaglercraft-Beta-13-Offline.html", ui: "dropdown" },
@@ -103,15 +105,17 @@
     const btn = dropdownCard.querySelector('#openBtn');
     fileList
       .filter(item => item.ui === "dropdown")
-      .forEach(file =>
-        select.add(new Option(file.name, file.url))
-      );
+      .forEach(file => {
+        // Use data property if available (base64), otherwise use url
+        const value = file.data || file.url;
+        select.add(new Option(file.name, value));
+      });
     select.addEventListener('change', () => {
       btn.disabled = !select.value;
     });
     btn.addEventListener('click', async () => {
-      const url = select.value;
-      await openFile(url);
+      const value = select.value;
+      await openFile(value);
     });
 
     // --- Game cards for items with ui === "card" ---
@@ -133,23 +137,38 @@
 
         const button = document.createElement('button');
         button.textContent = 'Play Now';
-        button.onclick = () => openFile(item.url);
+        button.onclick = () => {
+          // Use data property if available (base64), otherwise use url
+          const value = item.data || item.url;
+          openFile(value);
+        };
         card.appendChild(button);
 
         galleryDiv.appendChild(card);
       });
 
-    // Shared open-in-about:blank logic
-    async function openFile(url) {
+    // Shared open-in-about:blank logic - supports both base64 and regular URLs
+    async function openFile(source) {
       try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-        let html = await res.text();
+        let html;
+        let baseHref = '';
 
-        const baseHref = url.slice(0, url.lastIndexOf('/') + 1);
-        if (/<head[^>]*>/i.test(html)) {
-          html = html.replace(/<head([^>]*)>/i, `<head$1><base href="${baseHref}">`);
+        if (source.startsWith('data:')) {
+          // Handle base64 data URL
+          const base64Data = source.split(',')[1];
+          html = atob(base64Data);
         } else {
+          // Handle regular URLs
+          const res = await fetch(source);
+          if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+          html = await res.text();
+          baseHref = source.slice(0, source.lastIndexOf('/') + 1);
+        }
+
+        // Add base href if we have one (for regular URLs)
+        if (baseHref && /<head[^>]*>/i.test(html)) {
+          html = html.replace(/<head([^>]*)>/i, `<head$1><base href="${baseHref}">`);
+        } else if (baseHref) {
           html = `<head><base href="${baseHref}"></head>` + html;
         }
 
@@ -159,8 +178,8 @@
         w.document.write(html);
         w.document.close();
       } catch (err) {
-        console.error('Error loading remote HTML:', err);
-        alert('Error loading remote HTML: ' + err.message);
+        console.error('Error loading HTML:', err);
+        alert('Error loading HTML: ' + err.message);
       }
     }
   </script>
